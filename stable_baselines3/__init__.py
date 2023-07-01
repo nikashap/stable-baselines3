@@ -8,6 +8,9 @@ from stable_baselines3.her.her_replay_buffer import HerReplayBuffer
 from stable_baselines3.ppo import PPO
 from stable_baselines3.sac import SAC
 from stable_baselines3.td3 import TD3
+#NOTE: Added ClipTD3 and ClipDDPG from Nikasha
+from stable_baselines3.td3 import ClipTD3
+from stable_baselines3.ddpg import ClipDDPG
 
 # Read version from file
 version_file = os.path.join(os.path.dirname(__file__), "version.txt")
@@ -25,10 +28,12 @@ def HER(*args, **kwargs):
 __all__ = [
     "A2C",
     "DDPG",
+    "ClipDDPG",
     "DQN",
     "PPO",
     "SAC",
     "TD3",
+    "ClipTD3",
     "HerReplayBuffer",
     "get_system_info",
 ]

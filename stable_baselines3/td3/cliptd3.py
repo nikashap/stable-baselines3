@@ -13,12 +13,15 @@ from stable_baselines3.common.type_aliases import GymEnv, MaybeCallback, Schedul
 from stable_baselines3.common.utils import get_parameters_by_name, polyak_update
 from stable_baselines3.td3.policies import Actor, CnnPolicy, MlpPolicy, MultiInputPolicy, TD3Policy
 
-SelfTD3 = TypeVar("SelfTD3", bound="TD3")
+SelfClipTD3 = TypeVar("SelfClipTD3", bound="ClipTD3")
 
 
-class TD3(OffPolicyAlgorithm):
+class ClipTD3(OffPolicyAlgorithm):
     """
-    Twin Delayed DDPG (TD3)
+    ---
+    Twin Delayed DDPG (TD3) with clipped gradients to [grad_min, grad_max] range
+    modified by Nikasha on 05/31/23
+    ---
     Addressing Function Approximation Error in Actor-Critic Methods.
 
     Original implementation: https://github.com/sfujim/TD3
@@ -27,6 +30,7 @@ class TD3(OffPolicyAlgorithm):
 
     :param policy: The policy model to use (MlpPolicy, CnnPolicy, ...)
     :param env: The environment to learn from (if registered in Gym, can be str)
+    :param clip_val (NOTE: added by Nikasha): the max magnitude of the gradient in the actor network optimization step
     :param learning_rate: learning rate for adam optimizer,
         the same learning rate will be used for all networks (Q-Values, Actor and Value function)
         it can be a function of the current progress remaining (from 1 to 0)
@@ -80,6 +84,7 @@ class TD3(OffPolicyAlgorithm):
         self,
         policy: Union[str, Type[TD3Policy]],
         env: Union[GymEnv, str],
+        clip_val: float = 1.0,  #NOTE: added by Nikasha
         learning_rate: Union[float, Schedule] = 1e-3,
         buffer_size: int = 1_000_000,  # 1e6
         learning_starts: int = 100,
@@ -132,6 +137,7 @@ class TD3(OffPolicyAlgorithm):
         self.policy_delay = policy_delay
         self.target_noise_clip = target_noise_clip
         self.target_policy_noise = target_policy_noise
+        self.clip_val = clip_val #NOTE: added by Nikasha
 
         if _init_setup_model:
             self._setup_model()
@@ -197,6 +203,9 @@ class TD3(OffPolicyAlgorithm):
                 # Optimize the actor
                 self.actor.optimizer.zero_grad()
                 actor_loss.backward()
+
+                # Clip the gradient (NOTE: added by Nikasha)
+                th.nn.utils.clip_grad_value_(self.actor.parameters(), self.clip_val) 
                 self.actor.optimizer.step()
 
                 polyak_update(self.critic.parameters(), self.critic_target.parameters(), self.tau)
@@ -211,14 +220,14 @@ class TD3(OffPolicyAlgorithm):
         self.logger.record("train/critic_loss", np.mean(critic_losses))
 
     def learn(
-        self: SelfTD3,
+        self: SelfClipTD3,
         total_timesteps: int,
         callback: MaybeCallback = None,
         log_interval: int = 4,
-        tb_log_name: str = "TD3",
+        tb_log_name: str = "ClipTD3",
         reset_num_timesteps: bool = True,
         progress_bar: bool = False,
-    ) -> SelfTD3:
+    ) -> SelfClipTD3:
         return super().learn(
             total_timesteps=total_timesteps,
             callback=callback,

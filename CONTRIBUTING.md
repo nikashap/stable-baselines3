@@ -8,7 +8,7 @@ into two categories:
 2. You want to implement a feature or bug-fix for an outstanding issue
     - Look at the outstanding issues here: https://github.com/DLR-RM/stable-baselines3/issues
     - Pick an issue or feature and comment on the task that you want to work on this feature.
-    - If you need more context on a particular issue, please ask and we shall provide.
+    - If you need more context on a particular issue, please ask, and we shall provide.
 
 Once you finish implementing a feature or bug-fix, please send a Pull Request to
 https://github.com/DLR-RM/stable-baselines3
@@ -38,7 +38,7 @@ pip install -e .[docs,tests,extra]
 
 ## Codestyle
 
-We use [black codestyle](https://github.com/psf/black) (max line length of 127 characters) together with [isort](https://github.com/timothycrosley/isort) to sort the imports.
+We use [black codestyle](https://github.com/psf/black) (max line length of 127 characters) together with [ruff](https://github.com/astral-sh/ruff) (isort rules) to sort the imports.
 For the documentation, we use the default line length of 88 characters per line.
 
 **Please run `make format`** to reformat your code. You can check the codestyle using `make check-codestyle` and `make lint`.
@@ -61,9 +61,9 @@ def my_function(arg1: type1, arg2: type2) -> returntype:
 
 ## Pull Request (PR)
 
-Before proposing a PR, please open an issue, where the feature will be discussed. This prevent from duplicated PR to be proposed and also ease the code review process.
+Before proposing a PR, please open an issue, where the feature will be discussed. This prevents from duplicated PR to be proposed and also ease the code review process.
 
-Each PR need to be reviewed and accepted by at least one of the maintainers (@hill-a, @araffin, @ernestum, @AdamGleave or @Miffyli).
+Each PR need to be reviewed and accepted by at least one of the maintainers (@hill-a, @araffin, @ernestum, @AdamGleave, @Miffyli or @qgallouedec).
 A PR must pass the Continuous Integration tests to be merged with the master branch.
 
 
@@ -79,13 +79,13 @@ To run tests with `pytest`:
 make pytest
 ```
 
-Type checking with `pytype` and `mypy`:
+Type checking with `mypy`:
 
 ```
 make type
 ```
 
-Codestyle check with `black`, `isort` and `ruff`:
+Codestyle check with `black`, and `ruff` (`isort` rules):
 
 ```
 make check-codestyle

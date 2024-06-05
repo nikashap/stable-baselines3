@@ -3,6 +3,7 @@ import io
 import json
 import os
 import pathlib
+import tempfile
 import warnings
 import zipfile
 from collections import OrderedDict
@@ -359,7 +360,12 @@ def test_save_load_replay_buffer(tmp_path, model_class):
     old_replay_buffer = deepcopy(model.replay_buffer)
     model.save_replay_buffer(path)
     model.replay_buffer = None
-    model.load_replay_buffer(path)
+    for device in ["cpu", "cuda"]:
+        # Manually force device to check that the replay buffer device
+        # is correctly updated
+        model.device = th.device(device)
+        model.load_replay_buffer(path)
+        assert model.replay_buffer.device.type == model.device.type
 
     assert np.allclose(old_replay_buffer.observations, model.replay_buffer.observations)
     assert np.allclose(old_replay_buffer.actions, model.replay_buffer.actions)
@@ -675,8 +681,8 @@ def test_open_file(tmp_path):
     buff = io.BytesIO()
     assert buff.writable()
     assert buff.readable() is ("w" == "w")
-    _ = open_path(buff, "w")
-    assert _ is buff
+    opened_buffer = open_path(buff, "w")
+    assert opened_buffer is buff
     with pytest.raises(ValueError):
         buff.close()
         open_path(buff, "w")
@@ -742,3 +748,64 @@ def test_dqn_target_update_interval(tmp_path):
     model = DQN.load(tmp_path / "dqn_cartpole")
     os.remove(tmp_path / "dqn_cartpole.zip")
     assert model.target_update_interval == 100
+
+
+# Turn warnings into errors
+@pytest.mark.filterwarnings("error")
+def test_no_resource_warning(tmp_path):
+    # Check behavior of save/load
+    # see https://github.com/DLR-RM/stable-baselines3/issues/1751
+
+    # check that files are properly closed
+    # Create a PPO agent and save it
+    PPO("MlpPolicy", "CartPole-v1").save(tmp_path / "dqn_cartpole")
+    PPO.load(tmp_path / "dqn_cartpole")
+
+    PPO("MlpPolicy", "CartPole-v1").save(str(tmp_path / "dqn_cartpole"))
+    PPO.load(str(tmp_path / "dqn_cartpole"))
+
+    # Do the same but in memory, should not close the file
+    with tempfile.TemporaryFile() as fp:
+        PPO("MlpPolicy", "CartPole-v1").save(fp)
+        PPO.load(fp)
+        assert not fp.closed
+
+    # Same but with replay buffer
+    model = SAC("MlpPolicy", "Pendulum-v1", buffer_size=200)
+    model.save_replay_buffer(tmp_path / "replay")
+    model.load_replay_buffer(tmp_path / "replay")
+
+    model.save_replay_buffer(str(tmp_path / "replay"))
+    model.load_replay_buffer(str(tmp_path / "replay"))
+
+    with tempfile.TemporaryFile() as fp:
+        model.save_replay_buffer(fp)
+        fp.seek(0)
+        model.load_replay_buffer(fp)
+        assert not fp.closed
+
+
+def test_cast_lr_schedule(tmp_path):
+    # See GH#1900
+    model = PPO("MlpPolicy", "Pendulum-v1", learning_rate=lambda t: t * np.sin(1.0))
+    # Note: for recent version of numpy, np.float64 is a subclass of float
+    # so we need to use type here
+    # assert isinstance(model.lr_schedule(1.0), float)
+    assert type(model.lr_schedule(1.0)) is float  # noqa: E721
+    assert np.allclose(model.lr_schedule(0.5), 0.5 * np.sin(1.0))
+    model.save(tmp_path / "ppo.zip")
+    model = PPO.load(tmp_path / "ppo.zip")
+    assert type(model.lr_schedule(1.0)) is float  # noqa: E721
+    assert np.allclose(model.lr_schedule(0.5), 0.5 * np.sin(1.0))
+
+
+def test_save_load_net_arch_none(tmp_path):
+    """
+    Test that the model is loaded correctly when net_arch is manually set to None.
+    See GH#1928
+    """
+    PPO("MlpPolicy", "CartPole-v1", policy_kwargs=dict(net_arch=None)).save(tmp_path / "ppo.zip")
+    model = PPO.load(tmp_path / "ppo.zip")
+    # None has been replaced by the default net arch
+    assert model.policy.net_arch is not None
+    os.remove(tmp_path / "ppo.zip")

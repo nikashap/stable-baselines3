@@ -48,7 +48,7 @@ def maybe_make_env(env: Union[GymEnv, str], verbose: int) -> GymEnv:
     """If env is a string, make the environment; otherwise, return env.
 
     :param env: The environment to learn from.
-    :param verbose: Verbosity level: 0 for no output, 1 for indicating if envrironment is created
+    :param verbose: Verbosity level: 0 for no output, 1 for indicating if environment is created
     :return A Gym (vector) environment.
     """
     if isinstance(env, str):
@@ -420,9 +420,7 @@ class BaseAlgorithm(ABC):
         # Avoid resetting the environment when calling ``.learn()`` consecutive times
         if reset_num_timesteps or self._last_obs is None:
             assert self.env is not None
-            # pytype: disable=annotation-type-mismatch
             self._last_obs = self.env.reset()  # type: ignore[assignment]
-            # pytype: enable=annotation-type-mismatch
             self._last_episode_starts = np.ones((self.env.num_envs,), dtype=bool)
             # Retrieve unnormalized observation for saving into the buffer
             if self._vec_normalize_env is not None:
@@ -525,7 +523,10 @@ class BaseAlgorithm(ABC):
 
         :param total_timesteps: The total number of samples (env steps) to train on
         :param callback: callback(s) called at every step with state of the algorithm.
-        :param log_interval: The number of episodes before logging.
+        :param log_interval: for on-policy algos (e.g., PPO, A2C, ...) this is the number of
+            training iterations (i.e., log_interval * n_steps * n_envs timesteps) before logging;
+            for off-policy algos (e.g., TD3, SAC, ...) this is the number of episodes before
+            logging.
         :param tb_log_name: the name of the run for TensorBoard logging
         :param reset_num_timesteps: whether or not to reset the current timestep number (used in logging)
         :param progress_bar: Display a progress bar using tqdm and rich.
@@ -591,7 +592,7 @@ class BaseAlgorithm(ABC):
         if isinstance(load_path_or_dict, dict):
             params = load_path_or_dict
         else:
-            _, params, _ = load_from_zip_file(load_path_or_dict, device=device)
+            _, params, _ = load_from_zip_file(load_path_or_dict, device=device, load_data=False)
 
         # Keep track which objects were updated.
         # `_get_torch_save_params` returns [params, other_pytorch_variables].
@@ -691,10 +692,9 @@ class BaseAlgorithm(ABC):
             if "device" in data["policy_kwargs"]:
                 del data["policy_kwargs"]["device"]
             # backward compatibility, convert to new format
-            if "net_arch" in data["policy_kwargs"] and len(data["policy_kwargs"]["net_arch"]) > 0:
-                saved_net_arch = data["policy_kwargs"]["net_arch"]
-                if isinstance(saved_net_arch, list) and isinstance(saved_net_arch[0], dict):
-                    data["policy_kwargs"]["net_arch"] = saved_net_arch[0]
+            saved_net_arch = data["policy_kwargs"].get("net_arch")
+            if saved_net_arch and isinstance(saved_net_arch, list) and isinstance(saved_net_arch[0], dict):
+                data["policy_kwargs"]["net_arch"] = saved_net_arch[0]
 
         if "policy_kwargs" in kwargs and kwargs["policy_kwargs"] != data["policy_kwargs"]:
             raise ValueError(
@@ -707,7 +707,7 @@ class BaseAlgorithm(ABC):
 
         # Gym -> Gymnasium space conversion
         for key in {"observation_space", "action_space"}:
-            data[key] = _convert_space(data[key])  # pytype: disable=unsupported-operands
+            data[key] = _convert_space(data[key])
 
         if env is not None:
             # Wrap first if needed
@@ -726,14 +726,12 @@ class BaseAlgorithm(ABC):
             if "env" in data:
                 env = data["env"]
 
-        # pytype: disable=not-instantiable,wrong-keyword-args
         model = cls(
             policy=data["policy_class"],
             env=env,
             device=device,
             _init_setup_model=False,  # type: ignore[call-arg]
         )
-        # pytype: enable=not-instantiable,wrong-keyword-args
 
         # load parameters
         model.__dict__.update(data)
@@ -776,7 +774,7 @@ class BaseAlgorithm(ABC):
         # Sample gSDE exploration matrix, so it uses the right device
         # see issue #44
         if model.use_sde:
-            model.policy.reset_noise()  # type: ignore[operator]  # pytype: disable=attribute-error
+            model.policy.reset_noise()  # type: ignore[operator]
         return model
 
     def get_parameters(self) -> Dict[str, Dict]:

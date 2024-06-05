@@ -5,7 +5,7 @@ from typing import Union
 import gymnasium
 
 try:
-    import gym  # pytype: disable=import-error
+    import gym
 
     gym_installed = True
 except ImportError:
@@ -37,10 +37,10 @@ def _patch_env(env: Union["gym.Env", gymnasium.Env]) -> gymnasium.Env:  # pragma
         )
 
     try:
-        import shimmy  # pytype: disable=import-error
+        import shimmy
     except ImportError as e:
         raise ImportError(
-            "Missing shimmy installation. You an OpenAI Gym environment. "
+            "Missing shimmy installation. You provided an OpenAI Gym environment. "
             "Stable-Baselines3 (SB3) has transitioned to using Gymnasium internally. "
             "In order to use OpenAI Gym environments with SB3, you need to "
             "install shimmy (`pip install 'shimmy>=0.2.1'`)."
@@ -71,7 +71,7 @@ def _convert_space(space: Union["gym.Space", gymnasium.Space]) -> gymnasium.Spac
     :return: Patched space (gymnasium Space)
     """
 
-    # Gymnasium space, no convertion to be done
+    # Gymnasium space, no conversion to be done
     if isinstance(space, gymnasium.Space):
         return space
 
@@ -83,7 +83,7 @@ def _convert_space(space: Union["gym.Space", gymnasium.Space]) -> gymnasium.Spac
         )
 
     try:
-        import shimmy  # pytype: disable=import-error
+        import shimmy
     except ImportError as e:
         raise ImportError(
             "Missing shimmy installation. You provided an OpenAI Gym space. "

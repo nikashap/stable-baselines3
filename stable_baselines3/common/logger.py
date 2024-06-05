@@ -8,10 +8,10 @@ from collections import defaultdict
 from io import TextIOBase
 from typing import Any, Dict, List, Mapping, Optional, Sequence, TextIO, Tuple, Union
 
+import matplotlib.figure
 import numpy as np
 import pandas
 import torch as th
-from matplotlib import pyplot as plt
 
 try:
     from torch.utils.tensorboard import SummaryWriter
@@ -52,7 +52,7 @@ class Figure:
     :param close: if true, close the figure after logging it
     """
 
-    def __init__(self, figure: plt.figure, close: bool):
+    def __init__(self, figure: matplotlib.figure.Figure, close: bool):
         self.figure = figure
         self.close = close
 
@@ -164,8 +164,10 @@ class HumanOutputFormat(KVWriter, SeqWriter):
         if isinstance(filename_or_file, str):
             self.file = open(filename_or_file, "w")
             self.own_file = True
-        elif isinstance(filename_or_file, TextIOBase):
-            self.file = filename_or_file
+        elif isinstance(filename_or_file, TextIOBase) or hasattr(filename_or_file, "write"):
+            # Note: in theory `TextIOBase` check should be sufficient,
+            # in practice, libraries don't always inherit from it, see GH#1598
+            self.file = filename_or_file  # type: ignore[assignment]
             self.own_file = False
         else:
             raise ValueError(f"Expected file or str, got {filename_or_file}")

@@ -7,11 +7,11 @@ from gymnasium import spaces
 from stable_baselines3.common.type_aliases import AtariResetReturn, AtariStepReturn
 
 try:
-    import cv2  # pytype:disable=import-error
+    import cv2
 
     cv2.ocl.setUseOpenCL(False)
 except ImportError:
-    cv2 = None
+    cv2 = None  # type: ignore[assignment]
 
 
 class StickyActionEnv(gym.Wrapper[np.ndarray, int, np.ndarray, int]):
@@ -241,6 +241,7 @@ class WarpFrame(gym.ObservationWrapper[np.ndarray, int, np.ndarray]):
         :param frame: environment frame
         :return: the observation
         """
+        assert cv2 is not None, "OpenCV is not installed, you can do `pip install opencv-python`"
         frame = cv2.cvtColor(frame, cv2.COLOR_RGB2GRAY)
         frame = cv2.resize(frame, (self.width, self.height), interpolation=cv2.INTER_AREA)
         return frame[:, :, None]

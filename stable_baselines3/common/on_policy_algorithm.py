@@ -37,6 +37,8 @@ class OnPolicyAlgorithm(BaseAlgorithm):
         instead of action noise exploration (default: False)
     :param sde_sample_freq: Sample a new noise matrix every n steps when using gSDE
         Default: -1 (only sample at the beginning of the rollout)
+    :param rollout_buffer_class: Rollout buffer class to use. If ``None``, it will be automatically selected.
+    :param rollout_buffer_kwargs: Keyword arguments to pass to the rollout buffer on creation.
     :param stats_window_size: Window size for the rollout logging, specifying the number of episodes to average
         the reported success rate, mean episode length, and mean reward over
     :param tensorboard_log: the log location for tensorboard (if None, no logging)
@@ -68,6 +70,8 @@ class OnPolicyAlgorithm(BaseAlgorithm):
         max_grad_norm: float,
         use_sde: bool,
         sde_sample_freq: int,
+        rollout_buffer_class: Optional[Type[RolloutBuffer]] = None,
+        rollout_buffer_kwargs: Optional[Dict[str, Any]] = None,
         stats_window_size: int = 100,
         tensorboard_log: Optional[str] = None,
         monitor_wrapper: bool = True,
@@ -88,6 +92,7 @@ class OnPolicyAlgorithm(BaseAlgorithm):
             use_sde=use_sde,
             sde_sample_freq=sde_sample_freq,
             support_multi_env=True,
+            monitor_wrapper=monitor_wrapper,
             seed=seed,
             stats_window_size=stats_window_size,
             tensorboard_log=tensorboard_log,
@@ -100,6 +105,8 @@ class OnPolicyAlgorithm(BaseAlgorithm):
         self.ent_coef = ent_coef
         self.vf_coef = vf_coef
         self.max_grad_norm = max_grad_norm
+        self.rollout_buffer_class = rollout_buffer_class
+        self.rollout_buffer_kwargs = rollout_buffer_kwargs or {}
 
         if _init_setup_model:
             self._setup_model()
@@ -108,22 +115,25 @@ class OnPolicyAlgorithm(BaseAlgorithm):
         self._setup_lr_schedule()
         self.set_random_seed(self.seed)
 
-        buffer_cls = DictRolloutBuffer if isinstance(self.observation_space, spaces.Dict) else RolloutBuffer
+        if self.rollout_buffer_class is None:
+            if isinstance(self.observation_space, spaces.Dict):
+                self.rollout_buffer_class = DictRolloutBuffer
+            else:
+                self.rollout_buffer_class = RolloutBuffer
 
-        self.rollout_buffer = buffer_cls(
+        self.rollout_buffer = self.rollout_buffer_class(
             self.n_steps,
-            self.observation_space,
+            self.observation_space,  # type: ignore[arg-type]
             self.action_space,
             device=self.device,
             gamma=self.gamma,
             gae_lambda=self.gae_lambda,
             n_envs=self.n_envs,
+            **self.rollout_buffer_kwargs,
         )
-        # pytype:disable=not-instantiable
         self.policy = self.policy_class(  # type: ignore[assignment]
             self.observation_space, self.action_space, self.lr_schedule, use_sde=self.use_sde, **self.policy_kwargs
         )
-        # pytype:enable=not-instantiable
         self.policy = self.policy.to(self.device)
 
     def collect_rollouts(
@@ -171,9 +181,16 @@ class OnPolicyAlgorithm(BaseAlgorithm):
 
             # Rescale and perform action
             clipped_actions = actions
-            # Clip the actions to avoid out of bound error
+
             if isinstance(self.action_space, spaces.Box):
-                clipped_actions = np.clip(actions, self.action_space.low, self.action_space.high)
+                if self.policy.squash_output:
+                    # Unscale the actions to match env bounds
+                    # if they were previously squashed (scaled in [-1, 1])
+                    clipped_actions = self.policy.unscale_action(clipped_actions)
+                else:
+                    # Otherwise, clip the actions to avoid out of bound error
+                    # as we are sampling from an unbounded Gaussian distribution
+                    clipped_actions = np.clip(actions, self.action_space.low, self.action_space.high)
 
             new_obs, rewards, dones, infos = env.step(clipped_actions)
 
@@ -181,10 +198,10 @@ class OnPolicyAlgorithm(BaseAlgorithm):
 
             # Give access to local variables
             callback.update_locals(locals())
-            if callback.on_step() is False:
+            if not callback.on_step():
                 return False
 
-            self._update_info_buffer(infos)
+            self._update_info_buffer(infos, dones)
             n_steps += 1
 
             if isinstance(self.action_space, spaces.Discrete):
@@ -221,6 +238,8 @@ class OnPolicyAlgorithm(BaseAlgorithm):
 
         rollout_buffer.compute_returns_and_advantage(last_values=values, dones=dones)
 
+        callback.update_locals(locals())
+
         callback.on_rollout_end()
 
         return True
@@ -231,6 +250,28 @@ class OnPolicyAlgorithm(BaseAlgorithm):
         Implemented by individual algorithms.
         """
         raise NotImplementedError
+
+    def _dump_logs(self, iteration: int) -> None:
+        """
+        Write log.
+
+        :param iteration: Current logging iteration
+        """
+        assert self.ep_info_buffer is not None
+        assert self.ep_success_buffer is not None
+
+        time_elapsed = max((time.time_ns() - self.start_time) / 1e9, sys.float_info.epsilon)
+        fps = int((self.num_timesteps - self._num_timesteps_at_start) / time_elapsed)
+        self.logger.record("time/iterations", iteration, exclude="tensorboard")
+        if len(self.ep_info_buffer) > 0 and len(self.ep_info_buffer[0]) > 0:
+            self.logger.record("rollout/ep_rew_mean", safe_mean([ep_info["r"] for ep_info in self.ep_info_buffer]))
+            self.logger.record("rollout/ep_len_mean", safe_mean([ep_info["l"] for ep_info in self.ep_info_buffer]))
+        self.logger.record("time/fps", fps)
+        self.logger.record("time/time_elapsed", int(time_elapsed), exclude="tensorboard")
+        self.logger.record("time/total_timesteps", self.num_timesteps, exclude="tensorboard")
+        if len(self.ep_success_buffer) > 0:
+            self.logger.record("rollout/success_rate", safe_mean(self.ep_success_buffer))
+        self.logger.dump(step=self.num_timesteps)
 
     def learn(
         self: SelfOnPolicyAlgorithm,
@@ -258,7 +299,7 @@ class OnPolicyAlgorithm(BaseAlgorithm):
         while self.num_timesteps < total_timesteps:
             continue_training = self.collect_rollouts(self.env, callback, self.rollout_buffer, n_rollout_steps=self.n_steps)
 
-            if continue_training is False:
+            if not continue_training:
                 break
 
             iteration += 1
@@ -267,16 +308,7 @@ class OnPolicyAlgorithm(BaseAlgorithm):
             # Display training infos
             if log_interval is not None and iteration % log_interval == 0:
                 assert self.ep_info_buffer is not None
-                time_elapsed = max((time.time_ns() - self.start_time) / 1e9, sys.float_info.epsilon)
-                fps = int((self.num_timesteps - self._num_timesteps_at_start) / time_elapsed)
-                self.logger.record("time/iterations", iteration, exclude="tensorboard")
-                if len(self.ep_info_buffer) > 0 and len(self.ep_info_buffer[0]) > 0:
-                    self.logger.record("rollout/ep_rew_mean", safe_mean([ep_info["r"] for ep_info in self.ep_info_buffer]))
-                    self.logger.record("rollout/ep_len_mean", safe_mean([ep_info["l"] for ep_info in self.ep_info_buffer]))
-                self.logger.record("time/fps", fps)
-                self.logger.record("time/time_elapsed", int(time_elapsed), exclude="tensorboard")
-                self.logger.record("time/total_timesteps", self.num_timesteps, exclude="tensorboard")
-                self.logger.dump(step=self.num_timesteps)
+                self._dump_logs(iteration)
 
             self.train()
 

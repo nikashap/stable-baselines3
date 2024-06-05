@@ -11,6 +11,7 @@
 # add these directories to sys.path here. If the directory is relative to the
 # documentation root, use os.path.abspath to make it absolute, like shown here.
 #
+import datetime
 import os
 import sys
 from typing import Dict
@@ -43,7 +44,7 @@ with open(version_file) as file_handler:
 # -- Project information -----------------------------------------------------
 
 project = "Stable Baselines3"
-copyright = "2022, Stable Baselines3"
+copyright = f"2021-{datetime.date.today().year}, Stable Baselines3"
 author = "Stable Baselines3 Contributors"
 
 # The short X.Y version
@@ -63,7 +64,6 @@ release = __version__
 # ones.
 extensions = [
     "sphinx.ext.autodoc",
-    "sphinx_autodoc_typehints",
     "sphinx.ext.autosummary",
     "sphinx.ext.mathjax",
     "sphinx.ext.ifconfig",
@@ -71,6 +71,8 @@ extensions = [
     # 'sphinx.ext.intersphinx',
     # 'sphinx.ext.doctest'
 ]
+
+autodoc_typehints = "description"
 
 if enable_spell_check:
     extensions.append("sphinxcontrib.spelling")
@@ -111,13 +113,7 @@ pygments_style = "sphinx"
 # The theme to use for HTML and HTML Help pages.  See the documentation for
 # a list of builtin themes.
 
-# Fix for read the docs
-on_rtd = os.environ.get("READTHEDOCS") == "True"
-if on_rtd:
-    html_theme = "default"
-else:
-    html_theme = "sphinx_rtd_theme"
-
+html_theme = "sphinx_rtd_theme"
 html_logo = "_static/img/logo.png"
 
 

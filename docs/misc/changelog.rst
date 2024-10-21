@@ -3,30 +3,54 @@
 Changelog
 ==========
 
-Release 2.4.0a2 (WIP)
+Release 2.4.0a10 (WIP)
 --------------------------
+
+.. note::
+
+  DQN (and QR-DQN) models saved with SB3 < 2.4.0 will show a warning about
+  truncation of optimizer state when loaded with SB3 >= 2.4.0.
+  To suppress the warning, simply save the model again.
+  You can find more info in `PR #1963 <https://github.com/DLR-RM/stable-baselines3/pull/1963>`_
+
+.. warning::
+
+    Stable-Baselines3 (SB3) v2.4.0 will be the last one supporting Python 3.8 (end of life in October 2024)
+    and PyTorch < 2.0.
+    We highly recommended you to upgrade to Python >= 3.9 and PyTorch >= 2.0.
+
 
 Breaking Changes:
 ^^^^^^^^^^^^^^^^^
 
 New Features:
 ^^^^^^^^^^^^^
+- Added support for ``pre_linear_modules`` and ``post_linear_modules`` in ``create_mlp`` (useful for adding normalization layers, like in DroQ or CrossQ)
+- Enabled np.ndarray logging for TensorBoardOutputFormat as histogram (see GH#1634) (@iwishwasaneagle)
+- Updated env checker to warn users when using multi-dim array to define `MultiDiscrete` spaces
 
 Bug Fixes:
 ^^^^^^^^^^
 - Fixed memory leak when loading learner from storage, ``set_parameters()`` does not try to load the object data anymore
   and only loads the PyTorch parameters (@peteole)
 - Cast type in compute gae method to avoid error when using torch compile (@amjames)
-- Fixed error when loading a model that has ``net_arch`` manually set to ``None`` (@jak3122)
+- ``CallbackList`` now sets the ``.parent`` attribute of child callbacks to its own ``.parent``. (will-maclean)
+- Fixed error when loading a model that has ``net_arch`` manually set to ``None``   (@jak3122)
+- Set requirement numpy<2.0 until PyTorch is compatible (https://github.com/pytorch/pytorch/issues/107302)
+- Updated DQN optimizer input to only include q_network parameters, removing the target_q_network ones (@corentinlger)
+- Fixed ``test_buffers.py::test_device`` which was not actually checking the device of tensors (@rhaps0dy)
+
 
 `SB3-Contrib`_
 ^^^^^^^^^^^^^^
 
 `RL Zoo`_
 ^^^^^^^^^
+- Updated defaults hyperparameters for TQC/SAC for Swimmer-v4 (decrease gamma for more consistent results)
 
 `SBX`_ (SB3 + Jax)
 ^^^^^^^^^^^^^^^^^^
+- Added CNN support for DQN
 
 Deprecations:
 ^^^^^^^^^^^^^
@@ -34,12 +58,16 @@ Deprecations:
 Others:
 ^^^^^^^
 - Fixed various typos (@cschindlbeck)
+- Remove unnecessary SDE noise resampling in PPO update (@brn-dev)
+- Updated PyTorch version on CI to 2.3.1
+- Added a warning to recommend using CPU with on policy algorithms (A2C/PPO) and ``MlpPolicy``
 
 Bug Fixes:
 ^^^^^^^^^^
 
 Documentation:
 ^^^^^^^^^^^^^^
+- Updated PPO doc to recommend using CPU with ``MlpPolicy``
 
 Release 2.3.2 (2024-04-27)
 --------------------------
@@ -1662,4 +1690,5 @@ And all the contributors:
 @anand-bala @hughperkins @sidney-tio @AlexPasqua @dominicgkerr @Akhilez @Rocamonde @tobirohrer @ZikangXiong @ReHoss
 @DavyMorgan @luizapozzobon @Bonifatius94 @theSquaredError @harveybellini @DavyMorgan @FieteO @jonasreiher @npit @WeberSamuel @troiganto
 @lutogniew @lbergmann1 @lukashass @BertrandDecoster @pseudo-rnd-thoughts @stefanbschneider @kyle-he @PatrickHelm @corentinlger
-@marekm4 @stagoverflow @rushitnshah @markscsmith @NickLucche @cschindlbeck @peteole @jak3122
+@marekm4 @stagoverflow @rushitnshah @markscsmith @NickLucche @cschindlbeck @peteole @jak3122 @will-maclean
+@brn-dev
